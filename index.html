@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>BASE CONTROL PC 2026 PAE</title>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet"/>
+
+<style>
+body{
+    margin:0;
+    font-family:'Segoe UI',sans-serif;
+    background:#111;
+}
+
+/* ================= PANEL NACIONAL ================= */
+
+#panel{
+    position:absolute;
+    width:420px;
+    height:100%;
+    background:linear-gradient(180deg,#111 0%,#1b1b1b 100%);
+    color:white;
+    padding:45px;
+    z-index:1;
+}
+
+#panel h2{
+    font-size:34px;
+    margin-bottom:30px;
+}
+
+.kpi{
+    font-size:22px;
+    margin-bottom:8px;
+}
+
+#panel hr{
+    margin:25px 0;
+    opacity:.15;
+}
+
+.legend{
+    margin-top:20px;
+    font-size:20px;
+}
+
+.legend span{
+    width:18px;
+    height:18px;
+    display:inline-block;
+    margin-right:10px;
+    border-radius:4px;
+}
+
+/* ================= MAPA ================= */
+
+#map{
+    position:absolute;
+    left:420px;
+    width:calc(100% - 420px);
+    height:100%;
+}
+
+/* ================= POPUP ================= */
+
+.mapboxgl-popup-content{
+    background:#1c1c1c;
+    color:white;
+    border-radius:18px;
+    font-size:21px;
+    padding:28px;
+}
+
+.mapboxgl-popup-tip{
+    border-top-color:#1c1c1c!important;
+}
+
+/* ================= MODAL ================= */
+
+#modalOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.65);
+    display:none;
+    justify-content:center;
+    align-items:center;
+    z-index:999;
+}
+
+#modalBox{
+    background:#1c1c1c;
+    color:white;
+    width:92%;
+    max-width:1250px;
+    max-height:85vh;
+    border-radius:18px;
+    padding:30px;
+    display:flex;
+    flex-direction:column;
+}
+
+#modalTitle{
+    text-align:center;
+    margin:0;
+}
+
+#modalContent{
+    margin-top:20px;
+    overflow:auto;
+    flex:1;
+}
+
+#closeModal{
+    cursor:pointer;
+    font-size:22px;
+}
+
+/* ================= TABLA ================= */
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+}
+
+thead{
+    background:#222;
+    position:sticky;
+    top:0;
+}
+
+th{
+    padding:10px;
+    text-align:center;
+    border-bottom:1px solid #444;
+    font-weight:600;
+}
+
+td{
+    padding:9px;
+    text-align:center;
+    border-bottom:1px solid #1f1f1f;
+}
+
+tbody tr:nth-child(even){background:#161616;}
+tbody tr:nth-child(odd){background:#121212;}
+tbody tr:hover{background:#1f1f1f;transition:.2s;}
+
+</style>
+</head>
+
+<body>
+
+<div id="panel">
+    <h2>BASE CONTROL PC 2026 PAE</h2>
+
+    <div class="kpi"><b>IIEE:</b> 67,055</div>
+    <div class="kpi"><b>Usuarios:</b> 4,187,782</div>
+    <div class="kpi"><b>Ítems:</b> 711</div>
+
+    <hr>
+
+    <div class="kpi"><b>Estado:</b></div>
+    <div class="kpi">• CONTRATO: 38%</div>
+    <div class="kpi">• ADJUDICADO: 20%</div>
+    <div class="kpi">• EN INVITACIÓN: 43%</div>
+
+    <div class="legend">
+        <br><b>Estado Mayoritario</b><br><br>
+        <span style="background:#27AE60;"></span>Contrato<br>
+        <span style="background:#F1C40F;"></span>Adjudicado<br>
+        <span style="background:#E74C3C;"></span>Invitación
+    </div>
+</div>
+
+<div id="map"></div>
+
+<div id="modalOverlay">
+    <div id="modalBox">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 id="modalTitle"></h3>
+            <span id="closeModal">✖</span>
+        </div>
+        <div id="modalContent"></div>
+    </div>
+</div>
+
+<script>
+
+mapboxgl.accessToken="pk.eyJ1IjoiMjAxODE3MjUiLCJhIjoiY21sanZ1NmdzMDQ5czNrcHFwdXBpN3o2eCJ9.lM43dWvXvojawo82gZFOIw";
+
+const map=new mapboxgl.Map({
+    container:'map',
+    style:'mapbox://styles/mapbox/dark-v11',
+    center:[-74.8,-9.3],
+    zoom:5.4
+});
+
+let popup;
+let basePAE=[];
+
+fetch('https://f1434408-oss.github.io/data-science-portfolio/base_pae.json')
+.then(res=>res.json())
+.then(data=>basePAE=data);
+
+map.on('load',function(){
+
+map.getStyle().layers.forEach(layer=>{
+    if(layer.type==='symbol'){
+        map.setLayoutProperty(layer.id,'visibility','none');
+    }
+});
+
+map.setPaintProperty('water','fill-color','#5dade2');
+
+map.addSource('departamentos',{
+    type:'geojson',
+    data:'geo_pae_departamental.geojson'
+});
+
+map.addSource('hover-departamento',{
+    type:'geojson',
+    data:{type:"FeatureCollection",features:[]}
+});
+
+const colorExpression=[
+    'case',
+    ['all',
+        ['>=',['get','CONTRATO'],['get','ADJUDICADO']],
+        ['>=',['get','CONTRATO'],['get','EN INVITACIÓN']]
+    ],'#27AE60',
+    ['all',
+        ['>=',['get','ADJUDICADO'],['get','CONTRATO']],
+        ['>=',['get','ADJUDICADO'],['get','EN INVITACIÓN']]
+    ],'#F1C40F',
+    '#E74C3C'
+];
+
+map.addLayer({
+    id:'fill-layer',
+    type:'fill',
+    source:'departamentos',
+    paint:{'fill-color':colorExpression,'fill-opacity':0.85}
+});
+
+map.addLayer({
+    id:'border-layer',
+    type:'line',
+    source:'departamentos',
+    paint:{'line-color':'rgba(255,255,255,0.4)','line-width':1.2}
+});
+
+map.addLayer({
+    id:'hover-fill',
+    type:'fill',
+    source:'hover-departamento',
+    paint:{'fill-color':colorExpression,'fill-opacity':1}
+});
+
+map.addLayer({
+    id:'hover-border',
+    type:'line',
+    source:'hover-departamento',
+    paint:{'line-color':'#ffffff','line-width':3}
+});
+
+function scaleFeature(feature,scale){
+    const newFeature=JSON.parse(JSON.stringify(feature));
+    const coords=newFeature.geometry.coordinates[0];
+    let cx=0,cy=0;
+    coords.forEach(p=>{cx+=p[0];cy+=p[1];});
+    cx/=coords.length;
+    cy/=coords.length;
+    newFeature.geometry.coordinates[0]=coords.map(p=>[
+        cx+(p[0]-cx)*scale,
+        cy+(p[1]-cy)*scale
+    ]);
+    return newFeature;
+}
+
+map.on('mouseenter','fill-layer',function(e){
+
+    const feature=e.features[0];
+    const scaled=scaleFeature(feature,2.4);
+
+    map.getSource('hover-departamento').setData({
+        type:"FeatureCollection",
+        features:[scaled]
+    });
+
+    if(popup)popup.remove();
+
+    popup=new mapboxgl.Popup({offset:20})
+    .setLngLat(e.lngLat)
+    .setHTML(`
+    <b style="font-size:24px;">${feature.properties.NOMBDEP}</b>
+    <hr style="opacity:.3;">
+    <b>Ítems:</b> ${feature.properties.ITEMS_TOTAL}<br><br>
+    <b>Contrato:</b> ${feature.properties.CONTRATO}%<br>
+    <b>Adjudicado:</b> ${feature.properties.ADJUDICADO}%<br>
+    <b>Invitación:</b> ${feature.properties["EN INVITACIÓN"]}%<br><br>
+    <b>IIEE:</b> ${feature.properties.IIEE_TOTAL}<br>
+    <b>Usuarios:</b> ${feature.properties.USUARIOS_FMT}<br><br>
+    <a href="#" id="ver-detalle" style="color:#48a0ff;font-weight:bold;">
+    Ver detalle completo</a>
+    `)
+    .addTo(map);
+
+    document.getElementById('ver-detalle').addEventListener('click',function(evt){
+        evt.preventDefault();
+        abrirModalConTabla(feature.properties.NOMBDEP);
+    });
+
+});
+
+/* 🔥 No hay mouseleave */
+
+});
+
+/* ================= MODAL ================= */
+
+function abrirModalConTabla(departamento){
+
+const datosFiltrados=basePAE.filter(item=>
+item.DEPARTAMENTO?.trim().toUpperCase()===departamento.trim().toUpperCase()
+);
+
+document.getElementById('modalTitle').innerText=
+"Detalle completo - "+departamento;
+
+if(datosFiltrados.length===0){
+document.getElementById('modalContent').innerHTML="<p>No hay registros.</p>";
+}else{
+
+const columnasExcluir=["MODALIDAD_SDC","DEPARTAMENTO"];
+
+const columnas=Object.keys(datosFiltrados[0])
+.filter(col=>!columnasExcluir.includes(col));
+
+function format(valor,columna){
+if(valor===null||valor===undefined)return"";
+if(columna==="VALOR ADJUDICADO" && Number(valor)===0) return "—";
+if(!isNaN(valor)&&valor!=="")
+return Number(valor).toLocaleString("en-US");
+return valor;
+}
+
+let tabla="<table><thead><tr>";
+
+columnas.forEach(col=>{tabla+=`<th>${col}</th>`;});
+
+tabla+="</tr></thead><tbody>";
+
+datosFiltrados.forEach(row=>{
+tabla+="<tr>";
+columnas.forEach(col=>{
+tabla+=`<td>${format(row[col],col)}</td>`;
+});
+tabla+="</tr>";
+});
+
+tabla+="</tbody></table>";
+
+document.getElementById('modalContent').innerHTML=tabla;
+}
+
+document.getElementById('modalOverlay').style.display='flex';
+}
+
+document.getElementById('closeModal').addEventListener('click',function(){
+document.getElementById('modalOverlay').style.display='none';
+});
+
+</script>
+
+</body>
+</html>
