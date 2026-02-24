@@ -157,6 +157,7 @@ tbody tr:hover{background:#1f1f1f;transition:.2s;}
     <h2>BASE CONTROL PC 2026 PAE</h2>
 
     <div class="kpi"><b>IIEE:</b> 67,055</div>
+    <div class="kpi"><b>Proveedores:</b> 593</div>
     <div class="kpi"><b>Usuarios:</b> 4,187,782</div>
     <div class="kpi"><b>Ítems:</b> 711</div>
 
@@ -303,6 +304,7 @@ map.on('mouseenter','fill-layer',function(e){
     <b>Invitación:</b> ${feature.properties["EN INVITACIÓN"]}%<br><br>
     <b>IIEE:</b> ${feature.properties.IIEE_TOTAL}<br>
     <b>Usuarios:</b> ${feature.properties.USUARIOS_FMT}<br><br>
+    <b>Proveedores:</b> ${feature.properties.PROVEEDORES}<br><br>
     <a href="#" id="ver-detalle" style="color:#48a0ff;font-weight:bold;">
     Ver detalle completo</a>
     `)
@@ -315,11 +317,7 @@ map.on('mouseenter','fill-layer',function(e){
 
 });
 
-/* 🔥 No hay mouseleave */
-
 });
-
-/* ================= MODAL ================= */
 
 function abrirModalConTabla(departamento){
 
@@ -340,10 +338,16 @@ const columnas=Object.keys(datosFiltrados[0])
 .filter(col=>!columnasExcluir.includes(col));
 
 function format(valor,columna){
+
 if(valor===null||valor===undefined)return"";
+
 if(columna==="VALOR ADJUDICADO" && Number(valor)===0) return "—";
+
+if(columna==="RUC -POSTOR/PROVEEDOR") return valor;
+
 if(!isNaN(valor)&&valor!=="")
 return Number(valor).toLocaleString("en-US");
+
 return valor;
 }
 
